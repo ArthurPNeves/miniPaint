@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Mini Paint CG</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h2>Mini Paint - Computação Gráfica</h2>
+
+  <div>
+    <label><input type="radio" name="modo" value="desenho" checked> Desenhar</label>
+    <label><input type="radio" name="modo" value="selecao"> Selecionar</label>
+  </div>
+
+  <label for="algoritmo">Algoritmo:</label>
+  <select id="algoritmo">
+    <option value="dda">Linha - DDA</option>
+    <option value="bresenham_linha">Linha - Bresenham</option>
+    <option value="bresenham_circulo">Círculo - Bresenham</option>
+  </select>
+
+  <br>
+  <canvas id="canvas" width="1000" height="600"></canvas>
+  <br>
+  <button onclick="limparCanvas()">Limpar Canvas</button>
+
+  <h3>Transformações</h3>
+
+  <div>
+    <label>dx: <input id="dx" type="number" value="10"></label>
+    <label>dy: <input id="dy" type="number" value="10"></label>
+    <button onclick="aplicarTransformacao('translacao')">Transladar</button>
+  </div>
+
+  <div>
+    <label>sx: <input id="sx" type="number" value="1.2" step="0.1"></label>
+    <label>sy: <input id="sy" type="number" value="1.2" step="0.1"></label>
+    <button onclick="aplicarTransformacao('escala')">Escalar</button>
+  </div>
+
+  <div>
+    <label>Ângulo: <input id="angulo" type="number" value="45"></label>
+    <button onclick="aplicarTransformacao('rotacao')">Rotacionar</button>
+  </div>
+
+  <div>
+    <select id="eixo">
+      <option value="x">Reflexão X</option>
+      <option value="y">Reflexão Y</option>
+      <option value="xy">Reflexão XY</option>
+    </select>
+    <button onclick="aplicarTransformacao('reflexao')">Refletir</button>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
