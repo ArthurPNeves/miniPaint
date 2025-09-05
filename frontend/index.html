@@ -11,6 +11,7 @@
   <div>
     <label><input type="radio" name="modo" value="desenho" checked> Desenhar</label>
     <label><input type="radio" name="modo" value="selecao"> Selecionar</label>
+    <label><input type="radio" name="modo" value="recorte"> Recortar</label>
   </div>
 
   <label for="algoritmo">Algoritmo:</label>
@@ -19,6 +20,14 @@
     <option value="bresenham_linha">Linha - Bresenham</option>
     <option value="bresenham_circulo">Círculo - Bresenham</option>
   </select>
+
+  <label for="recorteAlgoritimo">Recorte:</label>
+  <select id="recorteAlgoritimo">
+    <option value="CoSutherland">Regiões codificadas - Cohen-Sutherland</option>
+    <option value="LiBarsky">Equação paramétrica – Liang-Barsky</option>
+  </select>
+  <button onclick="aplicarRecorte()">Aplicar Recorte</button>
+  <button id="resetCropBtn" onclick="resetRecorte()">Resetar Recorte</button>
 
   <br>
   <canvas id="canvas" width="1000" height="600"></canvas>
