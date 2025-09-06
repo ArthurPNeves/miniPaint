@@ -2,64 +2,148 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>Mini Paint CG</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="description" content="Paint - Aplicação de Computação Gráfica com interface moderna e responsiva">
+  <meta name="theme-color" content="#667eea">
+  <title>Paint - Computação Gráfica</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-  <h2>Mini Paint - Computação Gráfica</h2>
+  <div class="paint-container">
+    <!-- Menu bar superior -->
+    <div class="menu-bar">
+      <div class="menu-title">Paint - Computação Gráfica</div>
+      <div class="menu-controls">
+        <button class="control-btn" id="themeToggle" title="Alternar Modo Escuro">
+          <span class="theme-icon">🌙</span>
+        </button>
+        <button class="control-btn" id="fullscreenBtn" title="Tela Cheia do Canvas">
+          <span class="fullscreen-icon">⛶</span>
+        </button>
+      </div>
+    </div>
 
-  <div>
-    <label><input type="radio" name="modo" value="desenho" checked> Desenhar</label>
-    <label><input type="radio" name="modo" value="selecao"> Selecionar</label>
-    <label><input type="radio" name="modo" value="recorte"> Recortar</label>
+    <div class="main-layout">
+      <div class="toolbar" id="toolbar">
+        <!-- Ferramentas -->
+        <div class="tool-group">
+          <div class="group-title">Ferramentas</div>
+          <div class="tools">
+            <label class="tool-btn" title="Desenhar">
+              <input type="radio" name="modo" value="desenho" checked>
+              <div class="tool-icon">✏️</div>
+              <span>Desenhar</span>
+            </label>
+            <label class="tool-btn" title="Selecionar">
+              <input type="radio" name="modo" value="selecao">
+              <div class="tool-icon">📌</div>
+              <span>Selecionar</span>
+            </label>
+            <label class="tool-btn" title="Recortar">
+              <input type="radio" name="modo" value="recorte">
+              <div class="tool-icon">✂️</div>
+              <span>Recortar</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Algoritmos -->
+        <div class="tool-group">
+          <div class="group-title">Algoritmos</div>
+          <div class="controls">
+            <select id="algoritmo" class="paint-select">
+              <option value="dda">Linha - DDA</option>
+              <option value="bresenham_linha">Linha - Bresenham</option>
+              <option value="bresenham_circulo">Círculo - Bresenham</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Recorte -->
+        <div class="tool-group">
+          <div class="group-title">Recorte</div>
+          <div class="controls">
+            <select id="recorteAlgoritimo" class="paint-select">
+              <option value="CoSutherland">Cohen-Sutherland</option>
+              <option value="LiBarsky">Liang-Barsky</option>
+            </select>
+            <button onclick="aplicarRecorte()" class="paint-btn">Aplicar</button>
+            <button id="resetCropBtn" onclick="resetRecorte()" class="paint-btn">Reset</button>
+          </div>
+        </div>
+
+        <!-- Transformações -->
+        <div class="tool-group">
+          <div class="group-title">Transformações</div>
+          <div class="transform-controls">
+            <div class="transform-row">
+              <label>Translação:</label>
+              <input id="dx" type="number" value="10" class="small-input">
+              <input id="dy" type="number" value="10" class="small-input">
+              <button onclick="aplicarTransformacao('translacao')" class="paint-btn-small">Aplicar</button>
+            </div>
+            <div class="transform-row">
+              <label>Escala:</label>
+              <input id="sx" type="number" value="1.2" step="0.1" class="small-input">
+              <input id="sy" type="number" value="1.2" step="0.1" class="small-input">
+              <button onclick="aplicarTransformacao('escala')" class="paint-btn-small">Aplicar</button>
+            </div>
+            <div class="transform-row">
+              <label>Rotação:</label>
+              <input id="angulo" type="number" value="45" class="small-input">
+              <button onclick="aplicarTransformacao('rotacao')" class="paint-btn-small">Aplicar</button>
+            </div>
+            <div class="transform-row">
+              <label>Reflexão:</label>
+              <select id="eixo" class="small-select">
+                <option value="x">Eixo X</option>
+                <option value="y">Eixo Y</option>
+                <option value="xy">Eixo XY</option>
+              </select>
+              <button onclick="aplicarTransformacao('reflexao')" class="paint-btn-small">Aplicar</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Ações -->
+        <div class="tool-group">
+          <div class="group-title">Ações</div>
+          <div class="controls">
+            <button onclick="limparCanvas()" class="paint-btn danger">Limpar Tudo</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Área de desenho -->
+      <div class="canvas-area" id="canvasArea">
+        <div class="canvas-wrapper">
+          <canvas id="canvas" width="1000" height="600"></canvas>
+          <div class="canvas-controls">
+            <button class="canvas-control-btn" id="canvasFullscreen" title="Canvas em Tela Cheia">
+              <span class="canvas-fullscreen-icon">⛶</span>
+            </button>
+          </div>
+          <div class="canvas-status" id="canvasStatus">
+            <div class="status-indicator" id="statusIndicator"></div>
+            <span class="status-text" id="statusText">Pronto</span>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <label for="algoritmo">Algoritmo:</label>
-  <select id="algoritmo">
-    <option value="dda">Linha - DDA</option>
-    <option value="bresenham_linha">Linha - Bresenham</option>
-    <option value="bresenham_circulo">Círculo - Bresenham</option>
-  </select>
-
-  <label for="recorteAlgoritimo">Recorte:</label>
-  <select id="recorteAlgoritimo">
-    <option value="CoSutherland">Regiões codificadas - Cohen-Sutherland</option>
-    <option value="LiBarsky">Equação paramétrica – Liang-Barsky</option>
-  </select>
-  <button onclick="aplicarRecorte()">Aplicar Recorte</button>
-  <button id="resetCropBtn" onclick="resetRecorte()">Resetar Recorte</button>
-
-  <br>
-  <canvas id="canvas" width="1000" height="600"></canvas>
-  <br>
-  <button onclick="limparCanvas()">Limpar Canvas</button>
-
-  <h3>Transformações</h3>
-
-  <div>
-    <label>dx: <input id="dx" type="number" value="10"></label>
-    <label>dy: <input id="dy" type="number" value="10"></label>
-    <button onclick="aplicarTransformacao('translacao')">Transladar</button>
-  </div>
-
-  <div>
-    <label>sx: <input id="sx" type="number" value="1.2" step="0.1"></label>
-    <label>sy: <input id="sy" type="number" value="1.2" step="0.1"></label>
-    <button onclick="aplicarTransformacao('escala')">Escalar</button>
-  </div>
-
-  <div>
-    <label>Ângulo: <input id="angulo" type="number" value="45"></label>
-    <button onclick="aplicarTransformacao('rotacao')">Rotacionar</button>
-  </div>
-
-  <div>
-    <select id="eixo">
-      <option value="x">Reflexão X</option>
-      <option value="y">Reflexão Y</option>
-      <option value="xy">Reflexão XY</option>
-    </select>
-    <button onclick="aplicarTransformacao('reflexao')">Refletir</button>
+  <!-- Overlay de fullscreen -->
+  <div class="fullscreen-overlay" id="fullscreenOverlay">
+    <div class="fullscreen-header">
+      <div class="fullscreen-title">Canvas - Tela Cheia</div>
+      <button class="fullscreen-close" id="fullscreenClose">✕</button>
+    </div>
+    <div class="fullscreen-canvas-wrapper">
+      <canvas id="fullscreenCanvas" width="1000" height="600"></canvas>
+    </div>
   </div>
 
   <script src="script.js"></script>

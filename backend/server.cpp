@@ -68,17 +68,19 @@ int main() {
         }
     });
 
-    // POST /clip  -> usa recortarObjeto para linhas e circulos
-    svr.Post("/clip", [](const httplib::Request &req, httplib::Response &res) {
+    // POST /clip
+    svr.Post("/clip", [](const httplib::Request &req, httplib::Response &res){
+        set_cors_headers(res);
+        res.set_header("Content-Type", "application/json");
         try {
-            auto data = json::parse(req.body);
-            json resposta = recortarObjeto(data);
-            set_cors_headers(res);
-            res.set_content(resposta.dump(), "application/json");
-        } catch (const std::exception &e) {
-            set_cors_headers(res);
-            res.status = 500;
-            res.set_content(json({{"error", e.what()}}).dump(), "application/json");
+            auto j = json::parse(req.body);
+            json out = recortarObjeto(j); // chama a função que implementamos
+            res.set_content(out.dump(), "application/json");
+            return;
+        } catch (const std::exception &ex) {
+            json err = { {"aceita", false}, {"error", std::string("server parse error: ") + ex.what()} };
+            res.set_content(err.dump(), "application/json");
+            return;
         }
     });
 

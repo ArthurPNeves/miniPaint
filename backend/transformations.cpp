@@ -53,10 +53,13 @@ json transformarLinha(const json& dados, const std::string& transf, const json& 
     else if (transf == "reflexao") {
         std::string eixo = params["eixo"].get<std::string>();
         auto ref = [&](int x, int y) {
-            int dx = x - cx, dy = y - cy;
-            if (eixo=="x") return std::pair<int,int>(dx+cx, -dy+cy);
-            if (eixo=="y") return std::pair<int,int>(-dx+cx, dy+cy);
-            return std::pair<int,int>(-dx+cx, -dy+cy);
+            // Para o sistema cartesiano com reflexão em relação à origem (0,0):
+            // - Reflexão em X: mantém x, inverte y → (x, -y)
+            // - Reflexão em Y: inverte x, mantém y → (-x, y)
+            // - Reflexão em XY: inverte ambos → (-x, -y)
+            if (eixo=="x") return std::pair<int,int>(x, -y);        // reflexão no eixo X (horizontal)
+            if (eixo=="y") return std::pair<int,int>(-x, y);        // reflexão no eixo Y (vertical)
+            return std::pair<int,int>(-x, -y);                     // reflexão na origem
         };
         auto p1 = ref(x1,y1), p2 = ref(x2,y2);
         x1=p1.first; y1=p1.second; x2=p2.first; y2=p2.second;
@@ -93,9 +96,13 @@ json transformarCirculo(const json& dados, const std::string& transf, const json
     }
     else if (transf == "reflexao") {
         std::string eixo = params["eixo"].get<std::string>();
-        if (eixo=="x") yc = 2*cy - yc;
-        else if (eixo=="y") xc = 2*cx - xc;
-        else { xc = 2*cx - xc; yc = 2*cy - yc; }
+        // Para círculos no sistema cartesiano com reflexão em relação à origem (0,0):
+        // - Reflexão em X: mantém xc, inverte yc → (xc, -yc)
+        // - Reflexão em Y: inverte xc, mantém yc → (-xc, yc)
+        // - Reflexão em XY: inverte ambos → (-xc, -yc)
+        if (eixo=="x") yc = -yc;                    // reflexão no eixo X (horizontal)
+        else if (eixo=="y") xc = -xc;               // reflexão no eixo Y (vertical)  
+        else { xc = -xc; yc = -yc; }                // reflexão na origem
     }
 
     json novo = dados;

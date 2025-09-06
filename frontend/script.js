@@ -1,29 +1,178 @@
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 const algoritmoSelect = document.getElementById("algoritmo");
+let objetosRecortados = null;           // camada de preview mostrada após aplicarRecorte()
+let originalObjetosSnapshot = null;     // snapshot para undo (opcional)
+
+// Inicialização da interface
+document.addEventListener('DOMContentLoaded', function() {
+  initializeInterface();
+});
+
+function initializeInterface() {
+  setupThemeToggle();
+  setupFullscreen();
+  
+  // Carrega tema salvo
+  const savedTheme = localStorage.getItem('paint-theme') || 'light';
+  if (savedTheme === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    document.getElementById('themeToggle').querySelector('.theme-icon').textContent = '☀️';
+  }
+}
+
+function setupThemeToggle() {
+  const themeToggle = document.getElementById('themeToggle');
+  const themeIcon = themeToggle.querySelector('.theme-icon');
+  
+  themeToggle.addEventListener('click', function() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    
+    document.documentElement.setAttribute('data-theme', newTheme);
+    themeIcon.textContent = newTheme === 'dark' ? '☀️' : '🌙';
+    
+    localStorage.setItem('paint-theme', newTheme);
+    
+    // Redesenha o canvas para ajustar as cores
+    atualizarCanvas();
+    
+    // Animação de feedback
+    this.style.transform = 'scale(0.95)';
+    setTimeout(() => {
+      this.style.transform = '';
+    }, 150);
+  });
+}
+
+function setupFullscreen() {
+  const fullscreenBtn = document.getElementById('fullscreenBtn');
+  const canvasFullscreenBtn = document.getElementById('canvasFullscreen');
+  const fullscreenOverlay = document.getElementById('fullscreenOverlay');
+  const fullscreenClose = document.getElementById('fullscreenClose');
+  const fullscreenCanvas = document.getElementById('fullscreenCanvas');
+  
+  function openFullscreen() {
+    updateStatus('Abrindo tela cheia...', 'warning');
+    
+    // Copia o conteúdo do canvas principal para o canvas fullscreen
+    fullscreenCanvas.width = canvas.width;
+    fullscreenCanvas.height = canvas.height;
+    const fullscreenCtx = fullscreenCanvas.getContext('2d');
+    fullscreenCtx.drawImage(canvas, 0, 0);
+    
+    fullscreenOverlay.classList.add('active');
+    document.body.style.overflow = 'hidden';
+    
+    setTimeout(() => {
+      updateStatus('Tela cheia ativada', 'success');
+    }, 300);
+  }
+  
+  function closeFullscreen() {
+    fullscreenOverlay.classList.remove('active');
+    document.body.style.overflow = 'auto';
+    
+    // Copia de volta as alterações do canvas fullscreen para o principal
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(fullscreenCanvas, 0, 0);
+    
+    updateStatus('Tela cheia fechada', 'info');
+  }
+  
+  fullscreenBtn.addEventListener('click', openFullscreen);
+  canvasFullscreenBtn.addEventListener('click', openFullscreen);
+  fullscreenClose.addEventListener('click', closeFullscreen);
+  
+  // Fecha com ESC
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && fullscreenOverlay.classList.contains('active')) {
+      closeFullscreen();
+    }
+  });
+  
+  // Fecha clicando fora do canvas
+  fullscreenOverlay.addEventListener('click', function(e) {
+    if (e.target === fullscreenOverlay) {
+      closeFullscreen();
+    }
+  });
+}
+
+function updateStatus(message, type = 'info') {
+  const statusIndicator = document.getElementById('statusIndicator');
+  const statusText = document.getElementById('statusText');
+  
+  statusText.textContent = message;
+  
+  // Remove classes anteriores
+  statusIndicator.className = 'status-indicator';
+  
+  // Adiciona classe baseada no tipo
+  switch(type) {
+    case 'success':
+      statusIndicator.style.background = 'var(--success-color)';
+      statusIndicator.style.boxShadow = '0 0 8px var(--success-color)';
+      break;
+    case 'warning':
+      statusIndicator.style.background = 'var(--warning-color)';
+      statusIndicator.style.boxShadow = '0 0 8px var(--warning-color)';
+      break;
+    case 'error':
+      statusIndicator.style.background = 'var(--danger-color)';
+      statusIndicator.style.boxShadow = '0 0 8px var(--danger-color)';
+      break;
+    default:
+      statusIndicator.style.background = 'var(--accent-color)';
+      statusIndicator.style.boxShadow = '0 0 8px var(--accent-color)';
+  }
+  
+  // Auto-hide after 3 seconds
+  setTimeout(() => {
+    statusText.textContent = 'Pronto';
+    statusIndicator.style.background = 'var(--success-color)';
+    statusIndicator.style.boxShadow = '0 0 8px var(--success-color)';
+  }, 3000);
+}
+
+// Sistema de coordenadas cartesiano (4 quadrantes)
+const CANVAS_CENTER_X = canvas.width / 2;
+const CANVAS_CENTER_Y = canvas.height / 2;
+
+// Conversão entre sistema cartesiano e canvas
+function cartesianToCanvas(x, y) {
+  return {
+    x: CANVAS_CENTER_X + x,
+    y: CANVAS_CENTER_Y - y  // inverte Y pois canvas tem origem no topo
+  };
+}
+
+function canvasToCartesian(canvasX, canvasY) {
+  return {
+    x: canvasX - CANVAS_CENTER_X,
+    y: CANVAS_CENTER_Y - canvasY  // inverte Y
+  };
+}
 
 let clicks = [];
 let objetos = [];
 let selecionados = [];
 
-// === Funções utilitárias ===
-function drawObjeto(obj) {
-  ctx.fillStyle = obj.selecionado ? "red" : "blue";
+// === Desenho ===
 
-  // evita crash se pixels não existir
-  if (!obj.pixels || !Array.isArray(obj.pixels)) {
-    console.warn("drawObjeto: obj.pixels ausente ou inválido para", obj);
+function drawObjeto(obj) {
+  // Prioridade: se houver pixels (preview ou raster), desenhe-os
+  if (obj.pixels && Array.isArray(obj.pixels) && obj.pixels.length > 0) {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    ctx.fillStyle = obj.selecionado ? 'red' : (isDark ? '#f1f5f9' : 'black');
+    for (const p of obj.pixels) {
+      // Converte coordenadas cartesianas para canvas
+      const canvasPos = cartesianToCanvas(p.x, p.y);
+      ctx.fillRect(Math.round(canvasPos.x), Math.round(canvasPos.y), 1, 1);
+    }
     return;
   }
-
-  obj.pixels.forEach(p => {
-    const x = p.x ?? p[0];
-    const y = p.y ?? p[1];
-    ctx.fillRect(x, y, 1, 1);
-  });
 }
-
-
 
 function addObjeto(obj) {
   // garante que sempre exista um array para pixels (evita crash e facilita debug)
@@ -35,44 +184,95 @@ function addObjeto(obj) {
   drawObjeto(obj); // só desenha ele
 }
 
-
-// novo atualizarCanvas com suporte à "janela de recorte"
 function atualizarCanvas() {
+  // limpa canvas
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  // desenha todos os objetos normalmente (estado intacto)
-  objetos.forEach(drawObjeto);
 
-  // se há uma janela de recorte ativa, desenha overlay e redesenha a região interna
-  if (window.cropRect) {
-    const r = window.cropRect;
-    // overlay escuro
-    ctx.save();
-    ctx.fillStyle = "rgba(0,0,0,0.45)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.restore();
+  // Desenha os eixos cartesianos
+  drawCartesianAxes();
 
-    // redesenha apenas a região da janela por cima do overlay (clip)
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(r.x, r.y, r.w, r.h);
-    ctx.clip();
-    objetos.forEach(drawObjeto); // só a parte dentro do clip será desenhada por cima do overlay
-    ctx.restore();
+  // SEMPRE desenha todos os objetos originais primeiro
+  for (const obj of objetos) {
+    drawObjeto(obj);
+  }
 
-    // borda da janela
-    ctx.save();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = "#FFD700";
-    ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
-    ctx.restore();
+  // Se houver preview de recorte, desenha por cima com cor diferente
+  if (objetosRecortados && objetosRecortados.length > 0) {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    ctx.fillStyle = isDark ? '#60a5fa' : 'blue'; // cor diferente para preview
+    for (const obj of objetosRecortados) {
+      if (obj.pixels && Array.isArray(obj.pixels)) {
+        for (const p of obj.pixels) {
+          const canvasPos = cartesianToCanvas(p.x, p.y);
+          ctx.fillRect(Math.round(canvasPos.x), Math.round(canvasPos.y), 2, 2); // um pouco maior para destacar
+        }
+      }
+    }
   }
 }
 
+function drawCartesianAxes() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  
+  ctx.strokeStyle = isDark ? '#475569' : '#ddd';
+  ctx.lineWidth = 1;
+  
+  // Eixo X (horizontal)
+  ctx.beginPath();
+  ctx.moveTo(0, CANVAS_CENTER_Y);
+  ctx.lineTo(canvas.width, CANVAS_CENTER_Y);
+  ctx.stroke();
+  
+  // Eixo Y (vertical)
+  ctx.beginPath();
+  ctx.moveTo(CANVAS_CENTER_X, 0);
+  ctx.lineTo(CANVAS_CENTER_X, canvas.height);
+  ctx.stroke();
+  
+  // Marca a origem
+  ctx.fillStyle = isDark ? '#ef4444' : 'red';
+  ctx.fillRect(CANVAS_CENTER_X - 2, CANVAS_CENTER_Y - 2, 4, 4);
+  
+  // Adiciona algumas marcas nos eixos
+  ctx.fillStyle = isDark ? '#cbd5e1' : '#666';
+  ctx.font = '12px Arial';
+  ctx.textAlign = 'center';
+  
+  // Marcas no eixo X
+  for (let i = -400; i <= 400; i += 100) {
+    if (i !== 0) {
+      const canvasPos = cartesianToCanvas(i, 0);
+      ctx.fillText(i.toString(), canvasPos.x, canvasPos.y + 15);
+    }
+  }
+  
+  // Marcas no eixo Y
+  ctx.textAlign = 'right';
+  for (let i = -250; i <= 250; i += 50) {
+    if (i !== 0) {
+      const canvasPos = cartesianToCanvas(0, i);
+      ctx.fillText(i.toString(), canvasPos.x - 10, canvasPos.y + 4);
+    }
+  }
+  
+  // Label da origem
+  ctx.textAlign = 'left';
+  ctx.fillText('(0,0)', CANVAS_CENTER_X + 5, CANVAS_CENTER_Y - 5);
+}
+
+// Desenha os eixos inicialmente
+drawCartesianAxes();
 
 function limparCanvas() {
   objetos = [];
   selecionados = [];
+  objetosRecortados = null;
+  originalObjetosSnapshot = null;
+  tempRect = null;
+  selectStart = null;
+  selectEnd = null;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawCartesianAxes();
 }
 
 function getModo() {
@@ -84,12 +284,21 @@ canvas.addEventListener("click", async (e) => {
   if (getModo() !== "desenho") return;
 
   const rect = canvas.getBoundingClientRect();
-  const x = Math.floor(e.clientX - rect.left);
-  const y = Math.floor(e.clientY - rect.top);
+  const canvasX = Math.floor(e.clientX - rect.left);
+  const canvasY = Math.floor(e.clientY - rect.top);
+  
+  // Converte para coordenadas cartesianas
+  const cartesian = canvasToCartesian(canvasX, canvasY);
+  const x = cartesian.x;
+  const y = cartesian.y;
 
   clicks.push({ x, y });
-  ctx.fillStyle = "black";
-  ctx.fillRect(x, y, 3, 3);
+  
+  // Desenha o ponto de clique no canvas (convertendo de volta)
+  const canvasPos = cartesianToCanvas(x, y);
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  ctx.fillStyle = isDark ? "#f1f5f9" : "black";
+  ctx.fillRect(canvasPos.x, canvasPos.y, 3, 3);
 
   const algoritmo = algoritmoSelect.value;
 
@@ -110,6 +319,8 @@ canvas.addEventListener("click", async (e) => {
 
 async function sendDraw(payload, tipo) {
   try {
+    updateStatus('Desenhando...', 'warning');
+    
     const res = await fetch("http://localhost:8080/draw", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -117,48 +328,28 @@ async function sendDraw(payload, tipo) {
     });
 
     if (!res.ok) {
-      const text = await res.text().catch(()=>"");
+      const text = await res.text().catch(() => "");
       throw new Error(`Servidor retornou status ${res.status}. Body: ${text}`);
     }
 
     const data = await res.json();
-    console.log("sendDraw: resposta /draw ->", data);
-
-    // Se o servidor não retornou pixels, tenta obter rasterização a partir de 'dados' (fallback)
-    let pixels = data.pixels;
-    if (!pixels) {
-      console.warn("sendDraw: data.pixels ausente, tentando rasterizar usando data.dados...");
-      // chamamos /draw novamente enviando apenas os dados do objeto (backend deve rasterizar)
-      const fallbackBody = data.dados && Object.keys(data.dados).length ? data.dados : payload;
-      const res2 = await fetch("http://localhost:8080/draw", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(fallbackBody),
-      });
-
-      if (res2.ok) {
-        const d2 = await res2.json();
-        console.log("sendDraw: resposta fallback ->", d2);
-        pixels = d2.pixels ?? [];
-      } else {
-        console.error("sendDraw: fallback /draw falhou com status", res2.status);
-        pixels = [];
-      }
-    }
+    console.log("sendDraw response:", data);
 
     addObjeto({
-      tipo: data.tipo || tipo || "linha",
-      dados: data.dados || payload,
-      pixels: pixels,
+      tipo,
+      dados: payload,
+      pixels: data.pixels || [],
       selecionado: false,
     });
+    
+    updateStatus(`${tipo} desenhado com sucesso`, 'success');
 
   } catch (err) {
     console.error("sendDraw error:", err);
+    updateStatus('Erro ao desenhar', 'error');
     alert("Erro ao comunicar com o servidor: " + err.message + ". Verifique console/server.");
   }
 }
-
 
 // === Seleção de objetos ===
 let selecting = false,
@@ -168,14 +359,24 @@ let selecting = false,
 canvas.addEventListener("mousedown", (e) => {
   if (!["selecao", "recorte"].includes(getModo())) return;
   const rect = canvas.getBoundingClientRect();
-  selectStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  const canvasX = e.clientX - rect.left;
+  const canvasY = e.clientY - rect.top;
+  
+  // Converte para coordenadas cartesianas
+  const cartesian = canvasToCartesian(canvasX, canvasY);
+  selectStart = { x: cartesian.x, y: cartesian.y };
   selecting = true;
 });
 
 canvas.addEventListener("mousemove", (e) => {
   if (!["selecao", "recorte"].includes(getModo()) || !selecting) return;
   const rect = canvas.getBoundingClientRect();
-  selectEnd = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  const canvasX = e.clientX - rect.left;
+  const canvasY = e.clientY - rect.top;
+  
+  // Converte para coordenadas cartesianas
+  const cartesian = canvasToCartesian(canvasX, canvasY);
+  selectEnd = { x: cartesian.x, y: cartesian.y };
   atualizarCanvas();
   drawSelectionBox();
 });
@@ -186,15 +387,20 @@ canvas.addEventListener("mouseup", () => {
   if (getModo() === "selecao" && selectEnd) selecionarObjetos();
 });
 
-
 function drawSelectionBox() {
   if (!selectStart || !selectEnd) return;
-  ctx.strokeStyle = "green";
+  
+  // Converte coordenadas cartesianas para canvas para desenhar
+  const startCanvas = cartesianToCanvas(selectStart.x, selectStart.y);
+  const endCanvas = cartesianToCanvas(selectEnd.x, selectEnd.y);
+  
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  ctx.strokeStyle = isDark ? "#10b981" : "green";
   ctx.strokeRect(
-    selectStart.x,
-    selectStart.y,
-    selectEnd.x - selectStart.x,
-    selectEnd.y - selectStart.y
+    Math.min(startCanvas.x, endCanvas.x),
+    Math.min(startCanvas.y, endCanvas.y),
+    Math.abs(endCanvas.x - startCanvas.x),
+    Math.abs(endCanvas.y - startCanvas.y)
   );
 }
 
@@ -218,105 +424,106 @@ function selecionarObjetos() {
   atualizarCanvas();
 }
 
-// novo aplicarRecorte (janela — NÃO altera objetos)
-function aplicarRecorte() {
-  if (!selectStart || !selectEnd) return alert("Selecione uma região!");
-
+// === Recorte ===
+async function aplicarRecorte() {
+  // pega as coordenadas do retângulo de seleção
+  if (!selectStart || !selectEnd) return alert("Selecione uma área para recortar.");
   const xmin = Math.min(selectStart.x, selectEnd.x);
   const ymin = Math.min(selectStart.y, selectEnd.y);
   const xmax = Math.max(selectStart.x, selectEnd.x);
   const ymax = Math.max(selectStart.y, selectEnd.y);
+  const w = xmax - xmin;
+  const h = ymax - ymin;
+  if (w === 0 || h === 0) return alert("Área de recorte inválida.");
 
-  const cropRect = { x: xmin, y: ymin, w: xmax - xmin, h: ymax - ymin };
-  window.cropRect = cropRect;
+  // pega o algoritmo selecionado
+  const algoritmoRecorte = document.getElementById("recorteAlgoritimo").value;
 
-  function objetoIntersectsRect(obj, rect) {
-    if (obj.pixels && Array.isArray(obj.pixels) && obj.pixels.length) {
-      let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
-      for (const p of obj.pixels) {
-        const x = (p.x !== undefined) ? p.x : p[0];
-        const y = (p.y !== undefined) ? p.y : p[1];
-        if (x < minx) minx = x;
-        if (y < miny) miny = y;
-        if (x > maxx) maxx = x;
-        if (y > maxy) maxy = y;
-      }
-      if (minx === Infinity) return false;
-      return !(maxx < rect.x || minx > rect.x + rect.w || maxy < rect.y || miny > rect.y + rect.h);
-    }
-    if (obj.dados) {
-      const d = obj.dados;
-      if (obj.tipo === 'linha' && Array.isArray(d)) {
-        const xs = d.map(p=>p.x!==undefined?p.x:p[0]);
-        const ys = d.map(p=>p.y!==undefined?p.y:p[1]);
-        const minx = Math.min(...xs), miny = Math.min(...ys), maxx = Math.max(...xs), maxy = Math.max(...ys);
-        return !(maxx < rect.x || minx > rect.x + rect.w || maxy < rect.y || miny > rect.y + rect.h);
-      }
-      if (obj.tipo === 'circulo') {
-        const cx = d.cx ?? d.x ?? (d[0]??0);
-        const cy = d.cy ?? d.y ?? (d[1]??0);
-        const r = d.r ?? d.radius ?? 0;
-        const minx = cx - r, miny = cy - r, maxx = cx + r, maxy = cy + r;
-        return !(maxx < rect.x || minx > rect.x + rect.w || maxy < rect.y || miny > rect.y + rect.h);
-      }
-    }
-    return false;
+  // pega os objetos que têm pixels dentro do retângulo
+  const recortados = objetos.filter(obj =>
+    obj.pixels && obj.pixels.some(p => {
+      const px = p.x ?? p[0];
+      const py = p.y ?? p[1];
+      return px >= xmin && px <= xmax && py >= ymin && py <= ymax;
+    })
+  );
+
+  // se nenhum objeto for recortado, avisa e sai
+  if (recortados.length === 0) {
+    return alert("Nenhum objeto encontrado na área selecionada.");
   }
 
-  for (let obj of objetos) {
-    obj.selecionado = objetoIntersectsRect(obj, cropRect);
+  // se for encontrado circulo, avisa que não é suportado
+  if (recortados.some(o => o.tipo === 'circulo')) {
+    return alert("Recorte de círculos não é suportado.");
   }
 
-  atualizarCanvas();
+  // faz snapshot para possível undo (opcional)
+  originalObjetosSnapshot = JSON.parse(JSON.stringify(objetos));
+
+  // envia requisições individuais para o backend, conforme esperado pelo backend C++
+  try {
+    const resultados = [];
+    for (const obj of recortados) {
+      const reqBody = {
+        tipo: obj.tipo,
+        dados: obj.dados,
+        algoritmo: algoritmoRecorte,
+        xmin,
+        ymin,
+        xmax,
+        ymax
+      };
+      const res = await fetch("http://localhost:8080/clip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(reqBody)
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(`Servidor retornou status ${res.status}. Body: ${text}`);
+      }
+      const data = await res.json();
+      if (data.aceita && data.pixels && data.pixels.length > 0) {
+        resultados.push({
+          tipo: obj.tipo,
+          dados: obj.dados,
+          pixels: data.pixels,
+          selecionado: false
+        });
+      }
+    }
+
+    if (resultados.length === 0) {
+      alert("Nenhum objeto foi recortado (nenhum pixel dentro da área).");
+      return;
+    }
+
+    // cria camada de preview com os objetos recortados
+    objetosRecortados = resultados;
+
+    // atualiza canvas para mostrar a camada de preview
+    atualizarCanvas();
+
+    // limpa seleção e variáveis temporárias
+    selectStart = null;
+    selectEnd = null;
+    tempRect = null;
+
+  } catch (err) {
+    console.error("aplicarRecorte error:", err);
+    alert("Erro ao comunicar com o servidor: " + err.message + ". Verifique console/server.");
+  }
 }
 
-function resetRecorte() {
-  // se temos snapshot original, restaura
-  if (typeof originalObjetosSnapshot !== 'undefined' && originalObjetosSnapshot && originalObjetosSnapshot.length) {
-    try {
-      objetos = JSON.parse(JSON.stringify(originalObjetosSnapshot));
-      console.log('resetRecorte: restaurado a partir do snapshot salvo.', objetos.length, 'objetos.');
-    } catch (e) {
-      objetos = (originalObjetosSnapshot || []).slice();
-      console.warn('resetRecorte: deep copy falhou, usando cópia rasa', e);
-    }
-  } else {
-    // fallback: remove quaisquer objetos gerados por recorte (isRecorte=true)
-    objetos = (objetos || []).filter(o => !o.isRecorte);
-    console.log('resetRecorte: removidos objetos de recorte (fallback).');
-  }
-
-  // limpa seleção e redesenha
-  selecionados = [];
-  window.cropRect = null;
+async function resetRecorte() {
+  if (!objetosRecortados) return alert("Nenhum recorte ativo.");
+  objetosRecortados = null;
+  originalObjetosSnapshot = null;
   atualizarCanvas();
-
-  // remover overlay de recorte se existir
-  const overlay = document.getElementById('cropOverlay');
-  if (overlay) overlay.remove();
-
-  // resetar flags comuns usadas pelo recorte
-  window.isCropping = false;
-  window.cropRect = null;
-  window.currentCrop = null;
-
-  // voltar modo para desenho
-  const modos = document.getElementsByName('modo');
-  for (const m of modos) {
-    if (m.value === 'desenho') { m.checked = true; break; }
-  }
-
-  // redesenhar shapes caso exista função
-  if (typeof redrawShapes === 'function') redrawShapes();
-
-  console.log('resetRecorte: estado restaurado.');
 }
-
-
 
 // === Transformações ===
-
-
 function coletarParametrosTransformacao(transf) {
   let params = {};
   if (transf==="translacao"){
@@ -337,21 +544,64 @@ function coletarParametrosTransformacao(transf) {
 }
 
 async function aplicarTransformacao(transf) {
-  if (selecionados.length === 0) return alert("Selecione um objeto!");
-
-  const params = coletarParametrosTransformacao(transf);
-
-  for (let obj of selecionados) {
-    const res = await fetch("http://localhost:8080/transform", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({tipo: obj.tipo, dados: obj.dados, transf, params})
-    });
-    const data = await res.json();
-    obj.dados = data.dados;
-    obj.pixels = data.pixels;
+  if (selecionados.length === 0) {
+    updateStatus('Nenhum objeto selecionado', 'warning');
+    return alert("Selecione um objeto!");
   }
 
-  atualizarCanvas();
+  updateStatus(`Aplicando ${transf}...`, 'warning');
+  
+  const params = coletarParametrosTransformacao(transf);
+
+  try {
+    for (let obj of selecionados) {
+      const res = await fetch("http://localhost:8080/transform", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({tipo: obj.tipo, dados: obj.dados, transf, params})
+      });
+      const data = await res.json();
+      obj.dados = data.dados;
+      obj.pixels = data.pixels;
+    }
+
+    updateStatus(`${transf} aplicada com sucesso`, 'success');
+    atualizarCanvas();
+  } catch (err) {
+    console.error("Transform error:", err);
+    updateStatus('Erro na transformação', 'error');
+    alert("Erro ao aplicar transformação: " + err.message);
+  }
 }
 
+// Função para feedback visual dos botões
+function addButtonFeedback(button) {
+  button.style.transform = 'scale(0.95)';
+  setTimeout(() => {
+    button.style.transform = '';
+  }, 150);
+}
+
+// Adicionar feedback aos botões
+document.addEventListener('DOMContentLoaded', function() {
+  // Feedback para botões de transformação
+  document.querySelectorAll('.paint-btn-small').forEach(btn => {
+    btn.addEventListener('click', function() {
+      addButtonFeedback(this);
+    });
+  });
+  
+  // Feedback para botões principais
+  document.querySelectorAll('.paint-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      addButtonFeedback(this);
+    });
+  });
+  
+  // Feedback para controles do menu
+  document.querySelectorAll('.control-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      addButtonFeedback(this);
+    });
+  });
+});
