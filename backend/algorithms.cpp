@@ -5,69 +5,142 @@
 #include <set>
 #include <iostream>
 
-// ----------------- rasterização -----------------
 
 // DDA
 std::vector<Point> dda(int x1, int y1, int x2, int y2) {
     std::vector<Point> pixels;
     int dx = x2 - x1;
     int dy = y2 - y1;
-    int steps = std::max(std::abs(dx), std::abs(dy));
-    if (steps == 0) { pixels.push_back({x1,y1}); return pixels; }
-    float Xinc = dx / (float) steps;
-    float Yinc = dy / (float) steps;
-    float X = x1, Y = y1;
-    for (int i = 0; i <= steps; ++i) {
-        pixels.push_back({(int)std::lround(X), (int)std::lround(Y)});
-        X += Xinc; Y += Yinc;
+    
+    // Calcula o número de passos seguindo a lógica da imagem
+    int passos;
+    if (std::abs(dx) > std::abs(dy)) {
+        passos = std::abs(dx);
+    } else {
+        passos = std::abs(dy);
     }
+    
+    if (passos == 0) { 
+        pixels.push_back({x1, y1}); 
+        return pixels; 
+    }
+    
+    float x_incr = dx / (float)passos;
+    float y_incr = dy / (float)passos;
+    
+    float x = x1, y = y1;
+    
+    pixels.push_back({(int)std::round(x), (int)std::round(y)}); // pixel inicial
+    for (int k = 1; k <= passos; k++) {
+        x = x + x_incr;
+        y = y + y_incr;
+        pixels.push_back({(int)std::round(x), (int)std::round(y)});
+    }
+    
     return pixels;
 }
 
 // Bresenham (linha)
-std::vector<Point> bresenhamLine(int x0, int y0, int x1, int y1) {
+std::vector<Point> bresenhamLine(int x1, int y1, int x2, int y2) {
     std::vector<Point> pixels;
-    int dx = std::abs(x1 - x0);
-    int dy = std::abs(y1 - y0);
-    int sx = x0 < x1 ? 1 : -1;
-    int sy = y0 < y1 ? 1 : -1;
-    int err = dx - dy;
-
-    while (true) {
-        pixels.push_back({x0, y0});
-        if (x0 == x1 && y0 == y1) break;
-        int e2 = 2 * err;
-        if (e2 > -dy) { err -= dy; x0 += sx; }
-        if (e2 < dx) { err += dx; y0 += sy; }
+    int dx, dy, x, y, i;
+    int const1, const2, p;
+    int incrx, incry;
+    
+    dx = x2 - x1;
+    dy = y2 - y1;
+    
+    if (dx >= 0) {
+        incrx = 1;
+    } else {
+        incrx = -1;
+        dx = -dx;
     }
+    
+    if (dy >= 0) {
+        incry = 1;
+    } else {
+        incry = -1;
+        dy = -dy;
+    }
+    
+    x = x1;
+    y = y1;
+    pixels.push_back({x, y}); 
+    
+    if (dy < dx) {
+        p = 2 * dy - dx;
+        const1 = 2 * dy;
+        const2 = 2 * (dy - dx);
+        
+        for (i = 0; i < dx; i++) {
+            x += incrx;
+            if (p < 0) {
+                p += const1;
+            } else {
+                y += incry;
+                p += const2;
+            }
+            pixels.push_back({x, y});
+        }
+    } else {
+        // Caso onde dy é dominante
+        p = 2 * dx - dy;
+        const1 = 2 * dx;
+        const2 = 2 * (dx - dy);
+        
+        for (i = 0; i < dy; i++) {
+            y += incry;
+            if (p < 0) {
+                p += const1;
+            } else {
+                x += incrx;
+                p += const2;
+            }
+            pixels.push_back({x, y}); // colora_pixel
+        }
+    }
+    
     return pixels;
 }
 
 // Bresenham (círculo)
 std::vector<Point> bresenhamCircle(int xc, int yc, int r) {
     std::vector<Point> pixels;
-    int x = 0, y = r;
-    int d = 3 - 2 * r;
-    auto plot8 = [&](int px, int py) {
-        pixels.push_back({xc + px, yc + py});
-        pixels.push_back({xc - px, yc + py});
-        pixels.push_back({xc + px, yc - py});
-        pixels.push_back({xc - px, yc - py});
-        pixels.push_back({xc + py, yc + px});
-        pixels.push_back({xc - py, yc + px});
-        pixels.push_back({xc + py, yc - px});
-        pixels.push_back({xc - py, yc - px});
+    int x, y, p;
+    
+    // Procedimento plot_circle_points - plota os 8 pontos simétricos
+    auto plot_circle_points = [&]() {
+        pixels.push_back({xc + x, yc + y});
+        pixels.push_back({xc - x, yc + y});
+        pixels.push_back({xc + x, yc - y});
+        pixels.push_back({xc - x, yc - y});
+        pixels.push_back({xc + y, yc + x});
+        pixels.push_back({xc - y, yc + x});
+        pixels.push_back({xc + y, yc - x});
+        pixels.push_back({xc - y, yc - x});
     };
-    while (y >= x) {
-        plot8(x, y);
-        ++x;
-        if (d > 0) {
-            --y;
-            d = d + 4 * (x - y) + 10;
+    
+    // Inicialização
+    x = 0;
+    y = r;
+    p = 3 - 2 * r;
+    plot_circle_points();
+    
+    // Loop principal - enquanto x < y
+    while (x < y) {
+        if (p < 0) {
+            // Caso p < 0
+            p = p + 4 * x + 6;
         } else {
-            d = d + 4 * x + 6;
+            // Caso p >= 0
+            p = p + 4 * (x - y) + 10;
+            y = y - 1;
         }
+        x = x + 1;
+        plot_circle_points();
     }
+    
     // remover duplicatas ocasionais
     std::sort(pixels.begin(), pixels.end());
     pixels.erase(std::unique(pixels.begin(), pixels.end()), pixels.end());
@@ -101,72 +174,89 @@ json rasterize(const json& dados, const std::string& tipo) {
 }
 
 
-const int CS_INSIDE = 0;
-const int CS_LEFT   = 1;
-const int CS_RIGHT  = 2;
-const int CS_BOTTOM = 4;
-const int CS_TOP    = 8;
+// Limites da janela (globais para o algoritmo)
+static double xmin_global, xmax_global, ymin_global, ymax_global;
 
-static int computeOutCode(double x, double y, double rx, double ry, double rw, double rh) {
-    int code = CS_INSIDE;
-    if (x < rx) code |= CS_LEFT;
-    else if (x > rx + rw) code |= CS_RIGHT;
-    if (y < ry) code |= CS_TOP;
-    else if (y > ry + rh) code |= CS_BOTTOM;
-    return code;
+// Função region_code conforme mostrado na imagem
+int region_code(double x, double y) {
+    int codigo = 0;
+    
+    if (x < xmin_global) {
+        codigo = codigo + 1;
+    }
+    
+    if (x > xmax_global) {
+        codigo = codigo + 2;
+    }
+    
+    if (y < ymin_global) {
+        codigo = codigo + 4;
+    }
+    
+    if (y > ymax_global) {
+        codigo = codigo + 8;
+    }
+    
+    return codigo;
 }
 
 bool cohen_sutherland_clip(double x1, double y1, double x2, double y2,
                            double rx, double ry, double rw, double rh,
                            double &ox1, double &oy1, double &ox2, double &oy2)
 {
-    int outcode1 = computeOutCode(x1, y1, rx, ry, rw, rh);
-    int outcode2 = computeOutCode(x2, y2, rx, ry, rw, rh);
-    bool accept = false;
-
-    while (true) {
-        if ((outcode1 | outcode2) == 0) {
-            accept = true;
-            break;
-        } else if ((outcode1 & outcode2) != 0) {
-            break;
+    // Definir limites da janela globalmente
+    xmin_global = rx;
+    xmax_global = rx + rw;
+    ymin_global = ry;
+    ymax_global = ry + rh;
+    
+    bool aceite = false;
+    bool feito = false;
+    int c1, c2, cfora;
+    double xint, yint;
+    
+    while (!feito) {
+        c1 = region_code(x1, y1);
+        c2 = region_code(x2, y2);
+        
+        if ((c1 == 0) && (c2 == 0)) {
+            aceite = true;
+            feito = true;
+        } else if ((c1 & c2) != 0) {
+            feito = true;
         } else {
-            int outcodeOut = outcode1 ? outcode1 : outcode2;
-            double x = 0.0, y = 0.0;
-
-            if (outcodeOut & CS_TOP) {
-                if (y2 - y1 != 0) {
-                    x = x1 + (x2 - x1) * (ry - y1) / (y2 - y1);
-                    y = ry;
-                }
-            } else if (outcodeOut & CS_BOTTOM) {
-                if (y2 - y1 != 0) {
-                    x = x1 + (x2 - x1) * (ry + rh - y1) / (y2 - y1);
-                    y = ry + rh;
-                }
-            } else if (outcodeOut & CS_RIGHT) {
-                if (x2 - x1 != 0) {
-                    y = y1 + (y2 - y1) * (rx + rw - x1) / (x2 - x1);
-                    x = rx + rw;
-                }
-            } else if (outcodeOut & CS_LEFT) {
-                if (x2 - x1 != 0) {
-                    y = y1 + (y2 - y1) * (rx - x1) / (x2 - x1);
-                    x = rx;
-                }
-            }
-
-            if (outcodeOut == outcode1) {
-                x1 = x; y1 = y;
-                outcode1 = computeOutCode(x1, y1, rx, ry, rw, rh);
+            if (c1 != 0) {
+                cfora = c1;
             } else {
-                x2 = x; y2 = y;
-                outcode2 = computeOutCode(x2, y2, rx, ry, rw, rh);
+                cfora = c2;
+            }
+            
+            // Calcula interseção com os limites da janela
+            if ((cfora & 1) == 1) {
+                xint = xmin_global;
+                yint = y1 + (y2 - y1) * (xmin_global - x1) / (x2 - x1);
+            } else if ((cfora & 2) == 2) {
+                xint = xmax_global;
+                yint = y1 + (y2 - y1) * (xmax_global - x1) / (x2 - x1);
+            } else if ((cfora & 4) == 4) {
+                yint = ymin_global;
+                xint = x1 + (x2 - x1) * (ymin_global - y1) / (y2 - y1);
+            } else if ((cfora & 8) == 8) {
+                yint = ymax_global;
+                xint = x1 + (x2 - x1) * (ymax_global - y1) / (y2 - y1);
+            }
+            
+            if (c1 == cfora) {
+                x1 = xint;
+                y1 = yint;
+            } else {
+                x2 = xint;
+                y2 = yint;
             }
         }
     }
-
-    if (accept) {
+    
+    if (aceite) {
         ox1 = x1; oy1 = y1; ox2 = x2; oy2 = y2;
         return true;
     } else {
@@ -174,50 +264,69 @@ bool cohen_sutherland_clip(double x1, double y1, double x2, double y2,
     }
 }
 
-bool liang_barsky_clip(double x0, double y0, double x1, double y1,
-                       double rx, double ry, double rw, double rh,
-                       double &ox0, double &oy0, double &ox1, double &oy1)
+// Função cliptest conforme mostrado na imagem
+bool cliptest(double p, double q, double &u1, double &u2) {
+    bool result = true;
+    
+    if (p < 0.0) {
+        // Fora para dentro
+        double r = q / p;
+        if (r > u2) {
+            result = false;
+        } else if (r > u1) {
+            u1 = r;
+        }
+    } else if (p > 0.0) {
+        // Dentro para fora
+        double r = q / p;
+        if (r < u1) {
+            result = false;
+        } else if (r < u2) {
+            u2 = r;
+        }
+    } else if (q < 0.0) {
+        // p = 0, linha paralela e fora
+        result = false;
+    }
+    
+    return result;
+}
+
+bool liang_barsky_clip(double x1, double y1, double x2, double y2,
+                       double xmin, double ymin, double rw, double rh,
+                       double &ox1, double &oy1, double &ox2, double &oy2)
 {
-    double p[4], q[4];
-    p[0] = -(x1 - x0);
-    p[1] =  (x1 - x0);
-    p[2] = -(y1 - y0);
-    p[3] =  (y1 - y0);
-
-    q[0] = x0 - rx;
-    q[1] = rx + rw - x0;
-    q[2] = y0 - ry;
-    q[3] = ry + rh - y0;
-
-    double u0 = 0.0, u1 = 1.0;
-
-    for (int i = 0; i < 4; ++i) {
-        if (p[i] == 0.0) {
-            if (q[i] < 0.0) return false;
-        } else {
-            double t = q[i] / p[i];
-            if (p[i] < 0.0) {
-                if (t > u1) return false;
-                if (t > u0) u0 = t;
-            } else {
-                if (t < u0) return false;
-                if (t < u1) u1 = t;
+    double u1 = 0.0, u2 = 1.0;
+    double dx = x2 - x1;
+    double dy = y2 - y1;
+    double xmax = xmin + rw;
+    double ymax = ymin + rh;
+    
+    // Testa todos os limites da janela
+    if (cliptest(-dx, x1 - xmin, u1, u2)) {
+        if (cliptest(dx, xmax - x1, u1, u2)) {  
+            if (cliptest(-dy, y1 - ymin, u1, u2)) { 
+                if (cliptest(dy, ymax - y1, u1, u2)) { 
+                    if (u2 < 1.0) {
+                        x2 = x1 + u2 * dx;
+                        y2 = y1 + u2 * dy;
+                    }
+                    if (u1 > 0.0) {
+                        x1 = x1 + u1 * dx;
+                        y1 = y1 + u1 * dy;
+                    }
+                    
+                    // Desenha a linha recortada
+                    ox1 = x1; oy1 = y1; ox2 = x2; oy2 = y2;
+                    return true;
+                }
             }
         }
     }
-
-    if (u0 > u1) return false;
-
-    double cx0 = x0 + u0 * (x1 - x0);
-    double cy0 = y0 + u0 * (y1 - y0);
-    double cx1 = x0 + u1 * (x1 - x0);
-    double cy1 = y0 + u1 * (y1 - y0);
-
-    ox0 = cx0; oy0 = cy0; ox1 = cx1; oy1 = cy1;
-    return true;
+    
+    return false;
 }
 
-// wrapper: alg 0 = CS, 1 = LB
 bool clip_line(int alg,
                double x1,double y1,double x2,double y2,
                double rx,double ry,double rw,double rh,
