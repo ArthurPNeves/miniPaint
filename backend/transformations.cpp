@@ -5,9 +5,7 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-// ======================
 // Funções auxiliares
-// ======================
 static std::pair<int,int> centroLinha(const json& dados) {
     int cx = (dados["x1"].get<int>() + dados["x2"].get<int>()) / 2;
     int cy = (dados["y1"].get<int>() + dados["y2"].get<int>()) / 2;
@@ -18,9 +16,7 @@ static std::pair<int,int> centroCirculo(const json& dados) {
     return {dados["xc"], dados["yc"]};
 }
 
-// ======================
 // Linha
-// ======================
 json transformarLinha(const json& dados, const std::string& transf, const json& params) {
     int x1 = dados["x1"].get<int>();
     int y1 = dados["y1"].get<int>();
@@ -57,13 +53,10 @@ json transformarLinha(const json& dados, const std::string& transf, const json& 
     else if (transf == "reflexao") {
         std::string eixo = params["eixo"].get<std::string>();
         auto ref = [&](int x, int y) {
-            // Para o sistema cartesiano com reflexão em relação à origem (0,0):
-            // - Reflexão em X: mantém x, inverte y → (x, -y)
-            // - Reflexão em Y: inverte x, mantém y → (-x, y)
-            // - Reflexão em XY: inverte ambos → (-x, -y)
-            if (eixo=="x") return std::pair<int,int>(x, -y);        // reflexão no eixo X (horizontal)
-            if (eixo=="y") return std::pair<int,int>(-x, y);        // reflexão no eixo Y (vertical)
-            return std::pair<int,int>(-x, -y);                     // reflexão na origem
+
+            if (eixo=="x") return std::pair<int,int>(x, -y);       
+            if (eixo=="y") return std::pair<int,int>(-x, y);        
+            return std::pair<int,int>(-x, -y);                     
         };
         auto p1 = ref(x1,y1), p2 = ref(x2,y2);
         x1=p1.first; y1=p1.second; x2=p2.first; y2=p2.second;
@@ -75,14 +68,14 @@ json transformarLinha(const json& dados, const std::string& transf, const json& 
 }
 
 
-// ======================
 // Círculo
-// ======================
 json transformarCirculo(const json& dados, const std::string& transf, const json& params) {
     int xc = dados["xc"].get<int>();
     int yc = dados["yc"].get<int>();
     int r  = dados["r"].get<int>();
     auto [cx, cy] = centroCirculo(dados);
+    (void)cx; // Suprime o aviso de variável não utilizada
+    (void)cy;
 
     if (transf == "translacao") {
         int dx = params["dx"].get<int>();
@@ -115,9 +108,7 @@ json transformarCirculo(const json& dados, const std::string& transf, const json
 }
 
 
-// ======================
-// Genérica
-// ======================
+
 json aplicarTransformacao(
     const json& dados,
     const std::string& tipoObj,

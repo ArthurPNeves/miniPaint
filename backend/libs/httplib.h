@@ -7,7 +7,9 @@
 
 #ifndef CPPHTTPLIB_HTTPLIB_H
 #define CPPHTTPLIB_HTTPLIB_H
-
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0A00 // Define como Windows 10 (0x0A00)
+#endif
 #define CPPHTTPLIB_VERSION "0.26.0"
 #define CPPHTTPLIB_VERSION_NUM "0x001A00"
 
@@ -3083,8 +3085,8 @@ inline bool mmap::open(const char *path) {
   auto wpath = u8string_to_wstring(path);
   if (wpath.empty()) { return false; }
 
-  hFile_ = ::CreateFile2(wpath.c_str(), GENERIC_READ, FILE_SHARE_READ,
-                         OPEN_EXISTING, NULL);
+  hFile_ = ::CreateFileW(wpath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+
 
   if (hFile_ == INVALID_HANDLE_VALUE) { return false; }
 
